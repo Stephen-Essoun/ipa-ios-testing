@@ -1,0 +1,52 @@
+name: Build and Release
+on:
+  push:
+    branches:
+      - map
+
+jobs:
+  build-and-release-artifacts:
+    if: ${{ github.ref == 'refs/heads/map'}}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3.1.0
+        with:
+          ref: ${{ github.ref }}
+
+      - name: "Setup JAVA environment"
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: 'stable'
+
+      - run: flutter pub get
+
+      # Building the APKs without signing
+      - run: flutter build apk --release --no-codesign --split-per-abi
+
+      # Building the app bundle without signing
+      - run: flutter build appbundle --release --no-codesign
+
+      # Building the iOS app without code signing
+      - run: flutter build ios --release --no-codesign
+
+      # Create Payload directory and move the app to it
+      - run: mkdir -p build/ios/iphoneos/Payload && mv build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+
+      # Zip the Payload directory to create the .ipa file
+      - run: cd build/ios/iphoneos && zip -r app.ipa Payload
+
+      - name: Upload binaries to release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            build/app/outputs/flutter-apk/*.apk,
+            build/app/outputs/bundle/release/*.aab,
+            build/ios/iphoneos/app.ipa
+          tag: v1.0.${{ github.run_number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
